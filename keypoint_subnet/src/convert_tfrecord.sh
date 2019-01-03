@@ -1,0 +1,1 @@
+python convert_tfrecord.py --tfrecord_file /dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/MultiPoseNet-tensorflow/data/key_point_tfrecords/coco_2017_key_point_train_21.tfrecord --image_dir /dev/ftian_disk/tianfei01/workspace/deeplearn/train_data/detect/coco/train2017 --img_num 21

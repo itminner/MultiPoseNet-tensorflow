@@ -149,7 +149,7 @@ def convert_to_tfrecord(json_file, tfrecord_file):
 def convert_ai_challenger_tfrecord(tfrecord_file, json_file = '/media/ulsee/E/datasets/ai_challenger_keypoint_train_20170909/keypoint_train_annotations_20170909.json'):
     f = open(json_file, encoding='utf-8')
     labels = json.load(f)
-    img_path = '/media/ulsee/E/datasets/ai_challenger_keypoint_train_20170909/keypoint_train_images_20170902'
+    img_path = FLAGS.img_path 
 
     tfrecord_dir = os.path.dirname(tfrecord_file)
     if not os.path.exists(tfrecord_dir):
@@ -159,7 +159,8 @@ def convert_ai_challenger_tfrecord(tfrecord_file, json_file = '/media/ulsee/E/da
     total_img_nums = len(labels)
     count = 0
     count_zero = 0
-
+    
+    print("=========================image total num: ", len(labels))
     for label in labels:
         img_file = os.path.join(img_path, label['image_id'] + '.jpg')
         bbox = []
@@ -223,5 +224,5 @@ def convert_ai_challenger_tfrecord(tfrecord_file, json_file = '/media/ulsee/E/da
 
 if __name__ == '__main__':
 
-    convert_to_tfrecord(FLAGS.json_file, FLAGS.tfrecord_file)
-    # convert_ai_challenger_tfrecord(FLAGS.tfrecord_file)
+    #convert_to_tfrecord(FLAGS.json_file, FLAGS.tfrecord_file)
+    convert_ai_challenger_tfrecord(FLAGS.tfrecord_file, FLAGS.json_file)

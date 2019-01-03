@@ -26,7 +26,7 @@ from src.img_pre_processing import img_pre_processing
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_integer('train_nums', 118280, 'train data nums, default: cocotrain2017--118280')
 tf.flags.DEFINE_integer('epochs', 8, 'train epochs')
-tf.flags.DEFINE_integer('batch_size', 4, 'train batch size number')
+tf.flags.DEFINE_integer('batch_size', 40, 'train batch size number')
 tf.flags.DEFINE_integer('img_size', 480, 'net input size')
 tf.flags.DEFINE_float('learning_rate', 1e-4, 'trian lr')
 tf.flags.DEFINE_float('decay_rate', 0.9, 'lr decay rate')
@@ -40,7 +40,7 @@ tf.flags.DEFINE_string('checkpoint_path', '/media/ulsee/D/keypoint_subnet', 'pat
 tf.flags.DEFINE_string('tfrecord_file', '/media/ulsee/E/keypoint_subnet_tfrecord/coco_train2017.tfrecord', '')
 tf.flags.DEFINE_string('json_file', '/media/ulsee/E/keypoint_subnet_tfrecord/coco_train2017.json',
                        '')
-tf.flags.DEFINE_string('finetuning', '20181023-2043/model_alter.ckpt-239999',
+tf.flags.DEFINE_string('finetuning', None,
                        'folder of saved model that you wish to continue training or testing(e.g. 20180828-1803/model.ckpt-xxx), default:None')
 tf.flags.DEFINE_boolean('change_dataset', False,
                         'if change dataset from ai_challenger to coco, the num_keypoints will be changed. If so, when we finetunnig, need to '

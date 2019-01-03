@@ -41,10 +41,11 @@ try to convert coco annotation json file into as like ai_challenger format
 
 import json
 import numpy as np
+import tensorflow as tf
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_string('coco_json_file', '/dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/pose-residual-network/data/annotations/person_keypoints_val2017.json', 'input coco annotation json')
-tf.flags.DEFINE_string('coco_json_custom', '/dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/MultiPoseNet-tensorflow/coco_json_custom/coco_train_2017_custom.json', 'output custom json')
+tf.flags.DEFINE_string('coco_json_custom', '/dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/MultiPoseNet-tensorflow/data/coco_json_custom/coco_train_2017_custom.json', 'output custom json')
 
 f      = open(FLAGS.coco_json_file, encoding='utf-8')
 labels = json.load(f)

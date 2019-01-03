@@ -1,0 +1,1 @@
+python coco_json_convert.py --coco_json_file /dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/pose-residual-network/data/annotations/person_keypoints_train2017.json --coco_json_custom /dev/ftian_disk/tianfei01/workspace/deeplearn/human_pose/MultiPoseNet-tensorflow/data/coco_json_custom/coco_train_2017_custom.json
