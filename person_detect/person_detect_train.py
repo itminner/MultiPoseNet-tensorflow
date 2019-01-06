@@ -48,42 +48,32 @@ def make_parallel(fn, num_gpus, **kwargs):
         print("make_parallel, k: ", k, " v: ", v)
         in_splits[k] = tf.split(v, num_gpus)
 
-    losses            = []
     loc_preds         = []
     cls_preds         = []
-    decoded_loc_preds = []
     for i in range(num_gpus):
         print("==========num_gpus: ", num_gpus, " i ", i)
         with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
             with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
-                _loss, _loc_pred, _cls_pred, _decoded_loc_pred = fn(**{k : v[i] for k, v in in_splits.items()})
-                losses.append(_loss)
+                _loc_pred, _cls_pred = fn(**{k : v[i] for k, v in in_splits.items()})
                 loc_preds.append(_loc_pred)
                 cls_preds.append(_cls_pred)
-                decoded_loc_preds.append(_decoded_loc_pred)
-    print("----model output: ", _loss, _loc_pred, _cls_pred, _decoded_loc_pred)
-    print("----append output: ", losses, loc_preds, cls_preds, decoded_loc_preds)
-    return tf.concat(losses, axis=0, name='concat_batch_ret/losses'), \
-           tf.concat(loc_preds, axis=0, name='concat_batch_ret/losses'), \
-           tf.concat(cls_preds, axis=0, name='concat_batch_ret/losses'), \
-           tf.concat(decoded_loc_preds, axis=0, name='concat_batch_ret/pre_heat')
+    print("----model output: ", _loc_pred, _cls_pred)
+    print("----append output: ", loc_preds, cls_preds)
+    return tf.concat(loc_preds, axis=0, name='concat_batch_ret/loc_preds'), \
+           tf.concat(cls_preds, axis=0, name='concat_batch_ret/cls_preds')
 
 def person_detect_model(input_imgs, gt_boxes, gt_labels):
+    batch_size_for_model = int(FLAGS.batch_size / FLAGS.num_gpus)
     # --------------------------------net-------------------------------------#
-    backbone = BackBone(input_imgs, img_size=FLAGS.img_size, batch_size=FLAGS.batch_size, is_training=FLAGS.is_training)
+    backbone = BackBone(input_imgs, img_size=FLAGS.img_size, batch_size=batch_size_for_model, is_training=FLAGS.is_training)
     fpn, _ = backbone.build_fpn_feature()
-    net = RetinaNet(fpn=fpn, feature_map_dict=_, batch_size=backbone.batch_size,
+    net = RetinaNet(fpn=fpn, feature_map_dict=_, batch_size=batch_size_for_model,
                     num_classes=FLAGS.num_classes + 1, is_training=FLAGS.is_training)
     loc_pred, cls_pred = net.forward()
-    # ---------------------------------loss-----------------------------------#
-    loss, decoded_loc_pred = get_loss(img_size=FLAGS.img_size, batch_size=FLAGS.batch_size,
-                                      gt_boxes=gt_boxes, loc_pred=loc_pred,
-                                      gt_labels=gt_labels, cls_pred=cls_pred,
-                                      num_classes=FLAGS.num_classes, is_training=FLAGS.is_training)
-    return loss, loc_pred, cls_pred, decoded_loc_pred
+    return loc_pred, cls_pred
 
 def person_detect_train():
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3'
 
     # -------------------define where checkpoint path is-------------------------#
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
@@ -113,13 +103,17 @@ def person_detect_train():
         img_batch, img_ids, img_height_batch, img_width_batch, gt_boxs, gt_labels = reader.feed()
 
         #-----------------------------model def----------------------------------#
-        loss, loc_pred, cls_pred, decoded_loc_pred = make_parallel(person_detect_model, \
+        loc_pred, cls_pred = make_parallel(person_detect_model, \
                                                                    FLAGS.num_gpus, \
                                                                    input_imgs = input_imgs_placeholder, \
                                                                    gt_boxes = gt_boxs_placeholder, \
                                                                    gt_labels = gt_labels_placeholder)
 
-
+        # ---------------------------------loss-----------------------------------#
+        loss, decoded_loc_pred = get_loss(img_size=FLAGS.img_size, batch_size=FLAGS.batch_size,
+                                      gt_boxes=gt_boxs_placeholder, loc_pred=loc_pred,
+                                      gt_labels=gt_labels_placeholder, cls_pred=cls_pred,
+                                      num_classes=FLAGS.num_classes, is_training=FLAGS.is_training)
         # -----------------------------learning rate-------------------------------#
         global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.train.exponential_decay(FLAGS.learning_rate, global_step=global_step,
@@ -165,7 +159,7 @@ def person_detect_train():
 
         #----------------------------------init-----------------------------------#
         init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-        config  = tf.ConfigProto()
+        config  = tf.ConfigProto(allow_soft_placement=True)
         # config.gpu_options.per_process_gpu_memory_fraction = 0.7
         # sudo rm -f ~/.nv
         config.gpu_options.allow_growth = True

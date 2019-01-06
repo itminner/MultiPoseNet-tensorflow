@@ -203,6 +203,7 @@ def convert_ai_challenger_tfrecord(tfrecord_file, json_file = '/media/ulsee/E/da
         example = tf.train.Example(features=tf.train.Features(
             feature={
                 'image': _bytes_feature(img_data),
+                'id': _string_feature(bytes(label['image_id'], encoding='utf-8')),
                 'height': _int64_feature(shape[0]),
                 'width': _int64_feature(shape[1]),
                 'format': _bytes_feature(img_format),
