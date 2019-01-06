@@ -25,6 +25,7 @@ from src.retinanet import RetinaNet
 from keypoint_subnet.src.backbone import  BackBone
 
 FLAGS = tf.flags.FLAGS
+tf.flags.DEFINE_integer('num_gpus', 1, 'number of GPU use')
 tf.flags.DEFINE_integer('train_nums', 118280, 'train data nums, default: cocotrain2017--118280')
 tf.flags.DEFINE_integer('epochs', 10, 'train epochs')
 tf.flags.DEFINE_integer('num_classes', 1, '')
@@ -112,10 +113,11 @@ def person_detect_train():
         img_batch, img_ids, img_height_batch, img_width_batch, gt_boxs, gt_labels = reader.feed()
 
         #-----------------------------model def----------------------------------#
-        loss, loc_pred, cls_pred, decoded_loc_pred = make_parallel(person_detect_model,
-                                                                   input_imgs_placeholder,
-                                                                   gt_boxs_placeholder,
-                                                                   gt_labels_placeholder)
+        loss, loc_pred, cls_pred, decoded_loc_pred = make_parallel(person_detect_model, \
+                                                                   FLAGS.num_gpus, \
+                                                                   input_imgs = input_imgs_placeholder, \
+                                                                   gt_boxes = gt_boxs_placeholder, \
+                                                                   gt_labels = gt_labels_placeholder)
 
 
         # -----------------------------learning rate-------------------------------#
