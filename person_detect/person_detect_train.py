@@ -46,21 +46,40 @@ def make_parallel(fn, num_gpus, **kwargs):
     for k, v in kwargs.items():
         print("make_parallel, k: ", k, " v: ", v)
         in_splits[k] = tf.split(v, num_gpus)
-    
-    pre_heat = []
-    loss_l2  = []
-    losses   = []
+
+    losses            = []
+    loc_preds         = []
+    cls_preds         = []
+    decoded_loc_preds = []
     for i in range(num_gpus):
         print("==========num_gpus: ", num_gpus, " i ", i)
         with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
             with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
-                _losses, _loss_l2, _pre_heat = fn(**{k : v[i] for k, v in in_splits.items()})
-                losses.append(_losses)
-                loss_l2.append(_loss_l2)
-                pre_heat.append(_pre_heat)
-    print("----model output: ", _losses, _loss_l2, _pre_heat)
-    print("----append output: ", losses, loss_l2, pre_heat)
-    return tf.concat(losses, axis=0, name='concat_batch_ret/losses'),loss_l2,tf.concat(pre_heat, axis=0, name='concat_batch_ret/pre_heat')
+                _loss, _loc_pred, _cls_pred, _decoded_loc_pred = fn(**{k : v[i] for k, v in in_splits.items()})
+                losses.append(_loss)
+                loc_preds.append(_loc_pred)
+                cls_preds.append(_cls_pred)
+                decoded_loc_preds.append(_decoded_loc_pred)
+    print("----model output: ", _loss, _loc_pred, _cls_pred, _decoded_loc_pred)
+    print("----append output: ", losses, loc_preds, cls_preds, decoded_loc_preds)
+    return tf.concat(losses, axis=0, name='concat_batch_ret/losses'), \
+           tf.concat(loc_preds, axis=0, name='concat_batch_ret/losses'), \
+           tf.concat(cls_preds, axis=0, name='concat_batch_ret/losses'), \
+           tf.concat(decoded_loc_preds, axis=0, name='concat_batch_ret/pre_heat')
+
+def person_detect_model(input_imgs, gt_boxes, gt_labels):
+    # --------------------------------net-------------------------------------#
+    backbone = BackBone(input_imgs, img_size=FLAGS.img_size, batch_size=FLAGS.batch_size, is_training=FLAGS.is_training)
+    fpn, _ = backbone.build_fpn_feature()
+    net = RetinaNet(fpn=fpn, feature_map_dict=_, batch_size=backbone.batch_size,
+                    num_classes=FLAGS.num_classes + 1, is_training=FLAGS.is_training)
+    loc_pred, cls_pred = net.forward()
+    # ---------------------------------loss-----------------------------------#
+    loss, decoded_loc_pred = get_loss(img_size=FLAGS.img_size, batch_size=FLAGS.batch_size,
+                                      gt_boxes=gt_boxes, loc_pred=loc_pred,
+                                      gt_labels=gt_labels, cls_pred=cls_pred,
+                                      num_classes=FLAGS.num_classes, is_training=FLAGS.is_training)
+    return loss, loc_pred, cls_pred, decoded_loc_pred
 
 def person_detect_train():
     os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
@@ -83,22 +102,22 @@ def person_detect_train():
     graph = tf.Graph()
     with graph.as_default():
         #-----------------------------tf.placeholder-----------------------------#
+        input_imgs_placeholder = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.img_size, FLAGS.img_size, 3])
         gt_boxs_placeholder = tf.placeholder(tf.float32, shape=[FLAGS.batch_size, 30, 4])
         gt_labels_placeholder = tf.placeholder(tf.int64, shape=[FLAGS.batch_size, 30,])
-        #-------------------------------reader-----------------------------------#
-        reader = Box_Reader(tfrecord_file=FLAGS.tfrecord_file, img_size=FLAGS.img_size, batch_size=FLAGS.batch_size, epochs=FLAGS.epochs)
+
+        # -------------------------------reader-----------------------------------#
+        reader = Box_Reader(tfrecord_file=FLAGS.tfrecord_file, img_size=FLAGS.img_size, batch_size=FLAGS.batch_size,
+                            epochs=FLAGS.epochs)
         img_batch, img_ids, img_height_batch, img_width_batch, gt_boxs, gt_labels = reader.feed()
-        #--------------------------------net-------------------------------------#
-        backbone = BackBone(img_size=FLAGS.img_size, batch_size=FLAGS.batch_size, is_training=FLAGS.is_training)
-        fpn, _   = backbone.build_fpn_feature()
-        net      = RetinaNet(fpn=fpn, feature_map_dict=_, batch_size=backbone.batch_size,
-                             num_classes=FLAGS.num_classes+1, is_training=FLAGS.is_training)
-        loc_pred, cls_pred = net.forward()
-        #---------------------------------loss-----------------------------------#
-        loss, decoded_loc_pred = get_loss(img_size=FLAGS.img_size, batch_size=FLAGS.batch_size,
-                                          gt_boxes=gt_boxs_placeholder, loc_pred=loc_pred,
-                                          gt_labels=gt_labels_placeholder, cls_pred=cls_pred,
-                                          num_classes=FLAGS.num_classes, is_training=FLAGS.is_training)
+
+        #-----------------------------model def----------------------------------#
+        loss, loc_pred, cls_pred, decoded_loc_pred = make_parallel(person_detect_model,
+                                                                   input_imgs_placeholder,
+                                                                   gt_boxs_placeholder,
+                                                                   gt_labels_placeholder)
+
+
         # -----------------------------learning rate-------------------------------#
         global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.train.exponential_decay(FLAGS.learning_rate, global_step=global_step,
@@ -124,9 +143,9 @@ def person_detect_train():
         saver_alter     = tf.train.Saver(max_to_keep=5)
 
         #-------------------------------tf summary--------------------------------#
-        gt_img_batch_with_box    = get_gt_boxs_with_img(imgs=backbone.input_imgs, gt_boxs=gt_boxs_placeholder, gt_labels=gt_labels_placeholder,
+        gt_img_batch_with_box    = get_gt_boxs_with_img(imgs=input_imgs_placeholder, gt_boxs=gt_boxs_placeholder, gt_labels=gt_labels_placeholder,
                                                         batch_size=FLAGS.batch_size, img_size=FLAGS.img_size)
-        pred_img_batch_with_box  = get_pred_boxs_with_img(imgs=backbone.input_imgs, decoded_boxs=decoded_loc_pred, cls_pred=cls_pred,
+        pred_img_batch_with_box  = get_pred_boxs_with_img(imgs=input_imgs_placeholder, decoded_boxs=decoded_loc_pred, cls_pred=cls_pred,
                                                           batch_size=FLAGS.batch_size, img_size=FLAGS.img_size)
         gt_img_box_placeholder   = tf.placeholder(tf.float32,
                                                   shape=(FLAGS.batch_size, FLAGS.img_size, FLAGS.img_size, 3))
@@ -178,7 +197,7 @@ def person_detect_train():
                          loss, decoded_loc_pred, cls_pred,
                          train_op, learning_rate
                          ], feed_dict={
-                            backbone.input_imgs: imgs,
+                            input_imgs_placeholder: imgs,
                             gt_boxs_placeholder: boxes,
                             gt_labels_placeholder:labels,
                             img_ids_batch_placeholder:ids
@@ -190,7 +209,7 @@ def person_detect_train():
 
                     #-------------------summary------------------------#
                     # gt_img_box_placeholder: gt_img_box,
-                    merge_op = sess.run(summary_op,feed_dict={backbone.input_imgs: imgs,
+                    merge_op = sess.run(summary_op,feed_dict={input_imgs_placeholder: imgs,
                                                               gt_boxs_placeholder: boxes,
                                                               gt_labels_placeholder:labels,
                                                               pred_img_box_placeholder:pre_img_box,
