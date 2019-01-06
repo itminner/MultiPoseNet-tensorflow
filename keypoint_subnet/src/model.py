@@ -22,7 +22,7 @@ import tensorflow.contrib.slim as slim
 
 
 class Keypoint_Subnet(object):
-    def __init__(self, inputs, img_size, fpn, num_classes, batch_size):
+    def __init__(self, inputs, input_heats, img_size, fpn, num_classes, batch_size):
         self.inputs          = inputs
         self.img_size        = img_size
         self.feature_pyramid = fpn
@@ -30,7 +30,7 @@ class Keypoint_Subnet(object):
         self.batch_size      = batch_size
         self.stddev          = 0.01
 
-        self.input_heats     = tf.placeholder(tf.float32, [self.batch_size, self.img_size // 4, self.img_size // 4, self.num_classes])
+        self.input_heats     = input_heats
 
         # self.output, self.end_points = self.network()
 
@@ -111,16 +111,19 @@ class Keypoint_Subnet(object):
         for idx, pre_heat in enumerate(out_all):
             loss_l2 = tf.nn.l2_loss(tf.concat(pre_heat, axis=0) - self.input_heats, name='loss_%d' % idx)
             losses.append(loss_l2)
-
-        total_loss = tf.reduce_sum(losses) / self.batch_size
-        net_out_loss = tf.reduce_sum(loss_l2) / self.batch_size
+        
+        return losses, loss_l2, pre_heat
+        
+        #total_loss = tf.reduce_sum(losses) / self.batch_size
+        #net_out_loss = tf.reduce_sum(loss_l2) / self.batch_size
         #-----------------------------------------add tf summary----------------------------------#
         # tf.summary.scalar('total_loss', total_loss)
         # tf.summary.scalar('net_loss', net_out_loss)
         # tf.summary.image('ori_image', self.inputs, max_outputs=2)
 
+        #print("==========key model net loss ", total_loss, " ", net_out_loss, " batch_size: ", self.batch_size)
 
-        return total_loss, net_out_loss, pre_heat
+        #return total_loss, net_out_loss, pre_heat
 
 # if __name__ == '__main__':
 #     graph = tf.Graph()

@@ -16,10 +16,10 @@ from tensorflow.contrib.layers.python.layers import utils
 import tensorflow.contrib.slim as slim
 
 class BackBone(object):
-    def __init__(self, img_size, batch_size, is_training=True):
+    def __init__(self, input_imgs, img_size, batch_size, is_training=True):
         self.img_size    = img_size
         self.batch_size  = batch_size
-        self.input_imgs  = tf.placeholder(tf.float32, [self.batch_size, self.img_size, self.img_size, 3])
+        self.input_imgs  = input_imgs
         self.is_training = is_training
         self.stddev      = 0.01
 

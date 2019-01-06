@@ -41,8 +41,29 @@ tf.flags.DEFINE_string('tfrecord_file', '/media/ulsee/E/person_subnet_tfrecord/c
 tf.flags.DEFINE_string('finetuning',None,
                     'folder of saved model that you wish to continue training or testing(e.g. 20180828-1803/model.ckpt-xxx), default: None')
 
+def make_parallel(fn, num_gpus, **kwargs):
+    in_splits = {}
+    for k, v in kwargs.items():
+        print("make_parallel, k: ", k, " v: ", v)
+        in_splits[k] = tf.split(v, num_gpus)
+    
+    pre_heat = []
+    loss_l2  = []
+    losses   = []
+    for i in range(num_gpus):
+        print("==========num_gpus: ", num_gpus, " i ", i)
+        with tf.device(tf.DeviceSpec(device_type="GPU", device_index=i)):
+            with tf.variable_scope(tf.get_variable_scope(), reuse=tf.AUTO_REUSE):
+                _losses, _loss_l2, _pre_heat = fn(**{k : v[i] for k, v in in_splits.items()})
+                losses.append(_losses)
+                loss_l2.append(_loss_l2)
+                pre_heat.append(_pre_heat)
+    print("----model output: ", _losses, _loss_l2, _pre_heat)
+    print("----append output: ", losses, loss_l2, pre_heat)
+    return tf.concat(losses, axis=0, name='concat_batch_ret/losses'),loss_l2,tf.concat(pre_heat, axis=0, name='concat_batch_ret/pre_heat')
+
 def person_detect_train():
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
 
     # -------------------define where checkpoint path is-------------------------#
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
