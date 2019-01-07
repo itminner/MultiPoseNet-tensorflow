@@ -31,34 +31,38 @@ from skimage.filters import gaussian
 
 tf.summary.image
 # yolo v3
-from yolo_v3.models.yolo_v3 import yolo_v3
-from yolo_v3.utils.utils import process_image, get_anchors, get_classes, convert_box_coordinates, non_max_suppression, draw_boxes
+#from yolo_v3.models.yolo_v3 import yolo_v3
+#from yolo_v3.utils.utils import process_image, get_anchors, get_classes, convert_box_coordinates, non_max_suppression, draw_boxes
 
+FLAGS = tf.flags.FLAGS
 
-json_file       = '/media/ulsee/E/coco_val2017_aiformat2.json'
-coco_json_file  = '/media/ulsee/E/datasets/coco/annotations2017/person_keypoints_val2017.json'
-img_path        = '/media/ulsee/E/datasets/coco/cocoval2017'
-num_keypoints   = 17
-num_classes     = 1
-img_size        = 480
-point_score     = 0.05
-point_nms_thres = 5
+# validation data configure
+tf.flags.DEFINE_integer('num_keypoints', 17, 'number of human keypoints')
+tf.flags.DEFINE_integer('num_detect_classes', 1, 'number of object detect class (only person)')
+tf.flags.DEFINE_string('json_file', "/media/ulsee/E/coco_val2017_aiformat2.json", 'path of keypoint annotation json file')
+tf.flags.DEFINE_string('img_path', "/media/ulsee/E/datasets/coco/cocoval2017", 'path of validation images')
 
-keypoint_checkpoint     = '/media/ulsee/D/keypoint_subnet/20181015-1711/model_alter.ckpt-69999/model_alter.ckpt-339999'
-person_detec_checkpoint = '/media/ulsee/D/retinanet/20181022-1738/model_alter.ckpt-16'
-prn_checkpoint          = '/media/ulsee/D/PRN/20181015-0750/model.ckpt-245572'
+# checkpoints path
+tf.flags.DEFINE_string('keypoint_checkpoint', "../keypoint_subnet/20181015-1711/model_alter.ckpt-69999/model_alter.ckpt-339999", 'path of keypoint subnet checkpoints')
+tf.flags.DEFINE_string('person_detec_checkpoint', "../retinanet/20181022-1738/model_alter.ckpt-16", 'path of detect subnet checkpoints')
+tf.flags.DEFINE_string('prn_checkpoint', "../PRN/20181015-0750/model.ckpt-245572", 'path of prn subnet checkpoints')
+
+# validation configure
+tf.flags.DEFINE_boolean('is_used_gt_box', True, '')
+tf.flags.DEFINE_boolean('is_used_gt_points', True, '')
+
+tf.flags.DEFINE_integer('img_size', 480, 'size of validation image')
+tf.flags.DEFINE_float('point_score', 0.05, 'point_score')
+tf.flags.DEFINE_integer('point_nms_thres', 5, 'point_nms_thres')
 
 # yolo v3
-yolo_v3_checkpoint      = '/media/ulsee/D/yolov3/coco_pretrained_weights.ckpt'
-yolo_height = 416
-yolo_width  = 416
-yolo_anchors = get_anchors('yolo_v3/utils/anchors.txt')
-yolo_classes = get_classes('yolo_v3/utils/coco_classes.txt')
+#yolo_v3_checkpoint      = '/media/ulsee/D/yolov3/coco_pretrained_weights.ckpt'
+#yolo_height = 416
+#yolo_width  = 416
+#yolo_anchors = get_anchors('yolo_v3/utils/anchors.txt')
+#yolo_classes = get_classes('yolo_v3/utils/coco_classes.txt')
 
-
-is_used_gt_box    = True
-is_used_gt_points = True
-is_used_yolo_boxs = False
+#is_used_yolo_boxs = False
 
 def multi_pose_net_eval():
     '''
@@ -70,13 +74,13 @@ def multi_pose_net_eval():
     graph = tf.Graph()
 
     with graph.as_default():
-        backbone = BackBone(img_size=img_size, batch_size=1, is_training=False)
+        backbone = BackBone(img_size=FLAGS.img_size, batch_size=1, is_training=False)
         fpn, fmd = backbone.build_fpn_feature()
 
-        keypoint_net = Keypoint_Subnet(inputs=backbone.input_imgs, img_size=img_size, fpn=fpn, num_classes=num_keypoints, batch_size=1)
+        keypoint_net = Keypoint_Subnet(inputs=backbone.input_imgs, img_size=FLAGS.img_size, fpn=fpn, num_classes=FLAGS.num_keypoints, batch_size=1)
         pred_heatmap, _ = keypoint_net.forward()
 
-        retina_net = RetinaNet(fpn=fpn, feature_map_dict=fmd, batch_size=1, num_classes=num_classes+1, is_training=False)
+        retina_net = RetinaNet(fpn=fpn, feature_map_dict=fmd, batch_size=1, num_classes=FLAGS.num_detect_classes+1, is_training=False)
         loc_preds, cls_preds = retina_net.forward()
         select_boxs, select_scores = select_pred_boxs(loc_preds, cls_preds)  # select_boxs, (-1, 4), select_scores(-1,)
 
@@ -84,9 +88,9 @@ def multi_pose_net_eval():
         prn = PRN(inputs=prn_inputs_placeholder, output_node=1 * 56 * 36 * 17, is_training=False)
         prn_out = prn.forward()
 
-        yolo_v3_x = tf.placeholder(tf.float32, shape=[1, yolo_height, yolo_width, 3])
-        yolo_v3_outputs = yolo_v3(inputs=yolo_v3_x, num_classes=len(yolo_classes), anchors=yolo_anchors, h=yolo_height, w=yolo_width, training=False)
-        yolo_v3_raw_outptus = tf.concat(yolo_v3_outputs, axis=1)
+        #yolo_v3_x = tf.placeholder(tf.float32, shape=[1, yolo_height, yolo_width, 3])
+        #yolo_v3_outputs = yolo_v3(inputs=yolo_v3_x, num_classes=len(yolo_classes), anchors=yolo_anchors, h=yolo_height, w=yolo_width, training=False)
+        #yolo_v3_raw_outptus = tf.concat(yolo_v3_outputs, axis=1)
 
         # ---------------------------------restore------------------------------------#
         res50_var_list           = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='resnet_v2_50')
@@ -104,7 +108,7 @@ def multi_pose_net_eval():
         # print (len(yolo_moving_vars))
 
         train_vars = tf.trainable_variables()
-        yolo_train_vars = list(set(train_vars).difference(set(res50_var_list+fpn_var_list+keypoint_subnet_var_list+person_detect_var_list+prn_var_list)))
+        #yolo_train_vars = list(set(train_vars).difference(set(res50_var_list+fpn_var_list+keypoint_subnet_var_list+person_detect_var_list+prn_var_list)))
         # for var in yolo_train_vars:
         #     print (var)
         # print (len(yolo_train_vars))
@@ -113,7 +117,7 @@ def multi_pose_net_eval():
             var_list=(res50_var_list + res_moving_vars + fpn_var_list + keypoint_subnet_var_list))
         person_restore = tf.train.Saver(var_list=person_detect_var_list)
         prn_restore = tf.train.Saver(var_list=prn_var_list)
-        yolo_restore = tf.train.Saver(var_list=(yolo_train_vars+yolo_moving_vars))
+        #yolo_restore = tf.train.Saver(var_list=(yolo_train_vars+yolo_moving_vars))
 
         init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         config = tf.ConfigProto()
@@ -121,16 +125,16 @@ def multi_pose_net_eval():
 
         with tf.Session(graph=graph, config=config) as sess:
             sess.run(init_op)
-            keypoint_restore.restore(sess, keypoint_checkpoint)
+            keypoint_restore.restore(sess, FLAGS.keypoint_checkpoint)
             print ('#---------------keypoint subnet restored successfully.-------------#')
-            person_restore.restore(sess, person_detec_checkpoint)
+            person_restore.restore(sess, FLAGS.person_detec_checkpoint)
             print ('#---------------person detection subnet restored successfully.---------------#')
-            prn_restore.restore(sess, prn_checkpoint)
+            prn_restore.restore(sess, FLAGS.prn_checkpoint)
             print ('#---------------prn subnet restored successfully.----------------#')
-            yolo_restore.restore(sess, yolo_v3_checkpoint)
-            print ('#---------------yolo v3 restored successfully----------------#')
+            #yolo_restore.restore(sess, yolo_v3_checkpoint)
+            #print ('#---------------yolo v3 restored successfully----------------#')
 
-            img_names, img_keypoints, img_boxs, img_ids = read_json(json_file)
+            img_names, img_keypoints, img_boxs, img_ids = read_json(FLAGS.json_file)
 
             if len(img_names) != len(img_keypoints) and len(img_names) != len(img_boxs):
                 print('ids, points, boxs not equal.')
@@ -142,7 +146,7 @@ def multi_pose_net_eval():
                 img_name = img_names[i]
                 img_id   = img_ids[i]
 
-                img_file = os.path.join(img_path, img_name+'.jpg')
+                img_file = os.path.join(FLAGS.img_path, img_name+'.jpg')
 
                 img = cv2.imread(img_file, cv2.IMREAD_COLOR)
                 img_copy = img.copy()
@@ -150,10 +154,10 @@ def multi_pose_net_eval():
                 height, width, channels = img_copy.shape
                 # print ('ori shpae = ', img_copy.shape)
 
-                img_input = cv2.resize(img_copy, (img_size, img_size), interpolation=cv2.INTER_NEAREST)
-                yolo_img_input = cv2.resize(img_copy, (yolo_width, yolo_height)) / 255.0
+                img_input = cv2.resize(img_copy, (FLAGS.img_size, FLAGS.img_size), interpolation=cv2.INTER_NEAREST)
+                #yolo_img_input = cv2.resize(img_copy, (yolo_width, yolo_height)) / 255.0
 
-                yolo_output = sess.run(yolo_v3_raw_outptus, feed_dict={yolo_v3_x:[np.array(yolo_img_input, dtype=np.float32)]})
+                #yolo_output = sess.run(yolo_v3_raw_outptus, feed_dict={yolo_v3_x:[np.array(yolo_img_input, dtype=np.float32)]})
 
                 heatmaps, boxs, scores = sess.run([pred_heatmap, select_boxs, select_scores],
                                                   feed_dict={backbone.input_imgs:[img_input]})
@@ -161,21 +165,21 @@ def multi_pose_net_eval():
                 net_keypoints = prepare_heatmaps(heatmaps, height, width)
                 net_boxs      = translate(boxs, height, width) #[-1, 4], [xmin, xmax, ymin, ymax]
 
-                yolo_boxs     = get_yolo_boxs(yolo_output, img.shape, yolo_img_input.shape)
+                #yolo_boxs     = get_yolo_boxs(yolo_output, img.shape, yolo_img_input.shape)
 
                 gt_boxs = np.asarray(img_boxs[i])
                 # TODO gt部分都整完了，剩下预测的部分，注意全部弄成ndarray形式，list容易出错，由于浅拷贝的原因
                 prn_boxs   = net_boxs
                 prn_points = net_keypoints
 
-                if is_used_gt_box:
+                if FLAGS.is_used_gt_box:
                     prn_boxs = gt_boxs
 
-                if is_used_gt_points:
+                if FLAGS.is_used_gt_points:
                     prn_points = img_keypoints[i]
 
-                if is_used_yolo_boxs:
-                    prn_boxs = yolo_boxs
+                #if is_used_yolo_boxs:
+                #    prn_boxs = yolo_boxs
 
                 #--------------------------------------------------------#
                 # img_copy2 = img.copy()
@@ -193,7 +197,7 @@ def multi_pose_net_eval():
                 prn_inputs = np.asarray(prn_inputs)
 
                 for batch in range(prn_inputs.shape[0]):
-                    for c in range(num_keypoints):
+                    for c in range(FLAGS.num_keypoints):
                         prn_inputs[batch, :, :, c] = gaussian(prn_inputs[batch, :, :, c])
 
                 prn_keypoints_outputs = []
@@ -305,7 +309,7 @@ def get_ori_location(prn_keypoints, prn_boxs):
         # 先找到keypoints相对于box这么大的box应该所在的位置是哪个
         # 再根据box的值，找到此时keypoints相对于img_size这么大所在的位置
         # 最后再找到keypoints相对于原始图片所在的位置
-        for c in range(num_keypoints):
+        for c in range(FLAGS.num_keypoints):
 
             point_x = kps[c][0]
             point_y = kps[c][1]
@@ -348,7 +352,7 @@ def get_box_keypoints(prn_out, ori_height, ori_width):
     '''
     keypoints = []
     pose_score = 0
-    for c in range(num_keypoints):
+    for c in range(FLAGS.num_keypoints):
         xscore = yscore = 0.
         current_channel = prn_out[:, :, c]
         cur_max = np.max(current_channel)
@@ -407,7 +411,7 @@ def make_prn_inputs(keypoints, prn_boxs):
         single_prn_input = np.zeros((h, w, 17))
         for single_kps in list(keypoints):
             single_kps = np.reshape(np.asarray(single_kps), newshape=(17, -1))
-            for c in range(num_keypoints):
+            for c in range(FLAGS.num_keypoints):
                 points_in_channel_c = single_kps[c, :]
                 p_x = points_in_channel_c[0]
                 p_y = points_in_channel_c[1]
@@ -454,7 +458,7 @@ def make_prn_inputs(keypoints, prn_boxs):
 def select_pred_boxs(loc_preds, cls_preds):
 
     # -------------------------(1) generate anchor-----------------------------------------#
-    input_size = [tf.to_float(img_size), tf.to_float(img_size)]
+    input_size = [tf.to_float(FLAGS.img_size), tf.to_float(FLAGS.img_size)]
     feature_map_list = [(tf.ceil(tf.multiply(input_size[0], 1 / pow(2., i + 3))),
                          tf.ceil(tf.multiply(input_size[1], 1 / pow(2., i + 3))))
                         for i in range(5)]
@@ -530,11 +534,11 @@ def prepare_heatmaps(pred_heatmap, ori_height, ori_width):
     max_count = 0
     for i in range(1):
         current_pred_heatmap = pred_heatmap[i]
-        for c in range(num_keypoints):
+        for c in range(FLAGS.num_keypoints):
             current_channel = current_pred_heatmap[:, :, c]
             #-----------------find possible point location for single channel c---------#
-            threshold = point_score
-            nms_thres = point_nms_thres
+            threshold = FLAGS.point_score
+            nms_thres = FLAGS.point_nms_thres
             x, y      = np.where(current_channel > threshold)
             coordinate = list(zip(x, y))
 
@@ -600,8 +604,8 @@ def translate(boxs, ori_height, ori_width):
     :return:
     '''
     new_boxs = []
-    factorx  = ori_width / img_size
-    factory  = ori_height / img_size
+    factorx  = ori_width / FLAGS.img_size
+    factory  = ori_height / FLAGS.img_size
 
     for box in boxs:
         new_box = [1, 2, 3, 4]
@@ -613,37 +617,37 @@ def translate(boxs, ori_height, ori_width):
 
     return np.asarray(new_boxs)
 
-def get_yolo_boxs(yolo_output, ori_shape, resized_shape):
-    boxes = convert_box_coordinates(yolo_output)
-    filtered_boxes = non_max_suppression(boxes, confidence_threshold=0.5, iou_threshold=0.4)
-
-    # classes
-    names = {}
-    with open('yolo_v3/utils/coco_classes.txt') as f:
-        class_names = f.readlines()
-        for id, name in enumerate(class_names):
-            names[id] = name
-
-    height_ratio = ori_shape[0] / resized_shape[0]
-    width_ratio = ori_shape[1] / resized_shape[1]
-    ratio = (width_ratio, height_ratio)
-
-    yolo_boxs = []
-
-    for object_class, box_coords_and_prob in filtered_boxes.items():
-        if str(names[object_class])[:-1] != 'person':
-            continue
-        for box_coord, object_prob in box_coords_and_prob:
-            box_coord = box_coord.reshape(2, 2) * ratio
-            box_coord = box_coord.reshape(-1)
-
-            xmin = int(box_coord[0])
-            ymin = int(box_coord[1])
-            xmax = int(box_coord[2])
-            ymax = int(box_coord[3])
-
-            yolo_boxs.append([xmin, ymin, xmax, ymax])
-
-    return yolo_boxs
+# def get_yolo_boxs(yolo_output, ori_shape, resized_shape):
+#     boxes = convert_box_coordinates(yolo_output)
+#     filtered_boxes = non_max_suppression(boxes, confidence_threshold=0.5, iou_threshold=0.4)
+#
+#     # classes
+#     names = {}
+#     with open('yolo_v3/utils/coco_classes.txt') as f:
+#         class_names = f.readlines()
+#         for id, name in enumerate(class_names):
+#             names[id] = name
+#
+#     height_ratio = ori_shape[0] / resized_shape[0]
+#     width_ratio = ori_shape[1] / resized_shape[1]
+#     ratio = (width_ratio, height_ratio)
+#
+#     yolo_boxs = []
+#
+#     for object_class, box_coords_and_prob in filtered_boxes.items():
+#         if str(names[object_class])[:-1] != 'person':
+#             continue
+#         for box_coord, object_prob in box_coords_and_prob:
+#             box_coord = box_coord.reshape(2, 2) * ratio
+#             box_coord = box_coord.reshape(-1)
+#
+#             xmin = int(box_coord[0])
+#             ymin = int(box_coord[1])
+#             xmax = int(box_coord[2])
+#             ymax = int(box_coord[3])
+#
+#             yolo_boxs.append([xmin, ymin, xmax, ymax])
+#
+#     return yolo_boxs
 
 multi_pose_net_eval()
